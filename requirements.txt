@@ -1,0 +1,5 @@
+flask
+google-genai
+edge-tts
+python-dotenv
+asyncio

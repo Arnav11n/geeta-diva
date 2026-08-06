@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VedaSync - Baba</title>
+    <link rel="icon" href="/static/logo.png" type="image/png"/>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; display: flex; height: 100vh; font-family: 'Segoe UI', Tahoma, sans-serif; background: transparent; color: white; overflow: hidden; }
+        
+        #avatar-container { width: 50%; height: 100%; position: relative; background: transparent; overflow: hidden;}
+        #bg-video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; opacity: 0.85; transition: filter 2s, opacity 2s; }
+        
+        #chat-container { 
+            width: 50%; height: 100%; display: flex; flex-direction: column; 
+            background: radial-gradient(circle at top right, #451a03, #150601);
+            border-left: 2px solid #fbbf24; 
+            position: relative;
+        }
+
+        .mandala-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; opacity: 0.05; pointer-events: none; background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23fbbf24' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E"); }
+
+        #subtitles { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); width: 80%; text-align: center; color: #fbbf24; font-size: 20px; font-weight: bold; text-shadow: 0px 4px 15px rgba(0,0,0,0.9), 0px 1px 3px rgba(0,0,0,0.8); opacity: 0; transition: opacity 0.5s; pointer-events: none; z-index: 10; }
+
+        #header { padding: 15px; background: linear-gradient(135deg, rgba(120,53,15,0.9), rgba(180,83,9,0.9)); text-align: center; font-size: 20px; font-weight: bold; border-bottom: 2px solid #fbbf24; color: #fbbf24; z-index: 1; position: relative;}
+        
+        #chat-history { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; z-index: 1; }
+        .message { padding: 14px 20px; border-radius: 12px; max-width: 85%; line-height: 1.5; font-size: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); white-space: pre-wrap; }
+        
+        .user-msg { background: linear-gradient(135deg, #ea580c, #d97706); align-self: flex-end; border-bottom-right-radius: 2px; border: 1px solid #fbbf24; }
+        .bot-msg { background: linear-gradient(135deg, #0f766e, #047857); align-self: flex-start; border-bottom-left-radius: 2px; border: 1px solid #34d399; }
+        .error-msg { background: #ef4444; align-self: flex-start; border-bottom-left-radius: 2px; }
+        
+        .db-tag { display: inline-block; background: #fbbf24; color: #78350f; font-size: 11px; font-weight: bold; padding: 3px 8px; border-radius: 12px; margin-bottom: 5px; }
+        .verified-tag { display: inline-block; background: #34d399; color: #064e3b; font-size: 11px; font-weight: bold; padding: 3px 8px; border-radius: 12px; margin-bottom: 5px; }
+        
+        #quick-ask-section { margin-bottom: 5px; text-align: center; z-index: 1; }
+        .quick-ask-container { display: flex; justify-content: center; gap: 6px; flex-wrap: wrap; }
+        .quick-btn { background: rgba(251, 191, 36, 0.1); border: 1px solid #fbbf24; color: #fbbf24; padding: 5px 12px; border-radius: 20px; font-size: 12px; cursor: pointer; transition: 0.2s; }
+        .quick-btn:hover { background: #fbbf24; color: #451a03; }
+
+        #controls { padding: 15px 20px; background: rgba(69,26,3,0.9); display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #fbbf24; z-index: 1; }
+        .row { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+        .label-text { font-size: 12px; color: #fef3c7; margin-bottom: 2px; display: block; font-weight: bold; }
+        
+        input[type="text"] { flex: 1; padding: 12px; border-radius: 8px; border: 1px solid rgba(154,52,18,0.8); outline: none; background: rgba(92,26,6,0.6); color: white; font-size: 15px; }
+        input[type="text"]:focus { border-color: #fbbf24; }
+        
+        button { padding: 12px 20px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 14px; transition: 0.2s; }
+        button:disabled { opacity: 0.6; cursor: not-allowed; }
+        
+        #mic-btn { background: linear-gradient(135deg, #ef4444, #b91c1c); color: white; min-width: 130px; }
+        #send-btn { background: linear-gradient(135deg, #ea580c, #c2410c); color: white; min-width: 90px; }
+        
+        #download-btn { position: absolute; right: 15px; background: transparent; border: 1px solid #fbbf24; color: #fbbf24; font-size: 12px; padding: 6px 12px; }
+        #download-btn:hover { background: #fbbf24; color: #451a03; }
+
+        select { padding: 10px; border-radius: 8px; background: rgba(92,26,6,0.6); color: white; border: 1px solid rgba(154,52,18,0.8); outline: none; font-size: 13px; width: 100%; }
+        select:focus { border-color: #fbbf24; }
+        .select-group { flex: 1; }
+
+        #postcard-export {
+            position: absolute; left: -9999px; width: 700px; padding: 30px; 
+            background: linear-gradient(135deg, #451a03, #150601); border: 4px solid #fbbf24; 
+            border-radius: 16px; color: #fef3c7; font-family: 'Segoe UI', sans-serif; 
+            box-shadow: 0 0 20px rgba(0,0,0,0.5); z-index: -100;
+            display: flex; flex-direction: column; gap: 20px;
+        }
+
+        #mobile-blocker { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #2c1003; color: #fbbf24; z-index: 999999; text-align: center; padding: 40px; font-size: 1.5rem; font-weight: bold; flex-direction: column; justify-content: center; align-items: center; line-height: 1.6; }
+        @media (max-width: 800px) { #mobile-blocker { display: flex; } #avatar-container, #chat-container, #entry-screen, #intro-overlay { display: none !important; } }
+
+        #entry-screen { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: radial-gradient(circle at center, #451a03, #000000); z-index: 100000; display: flex; flex-direction: column; justify-content: center; align-items: center; color: #fbbf24; transition: opacity 0.5s; }
+        #enter-btn { margin-top: 30px; padding: 15px 40px; font-size: 1.2rem; background: #fbbf24; color: #78350f; border: none; border-radius: 50px; cursor: pointer; transition: 0.3s; box-shadow: 0 0 20px rgba(251, 191, 36, 0.4); }
+        #enter-btn:hover { transform: scale(1.05); box-shadow: 0 0 30px rgba(251, 191, 36, 0.8); }
+
+        #intro-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: black; z-index: 99990; display: none; transition: background 0.2s, opacity 2.0s ease-in-out; }
+        #intro-video { width: 100%; height: 100%; object-fit: cover; pointer-events: none; transition: opacity 0.5s; }
+    </style>
+</head>
+<body>
+
+    <audio id="bgm-audio" src="/static/bgm.mp3" loop></audio>
+    <audio id="conch-audio" src="/static/conch.mp3"></audio> 
+
+    <div id="mobile-blocker">
+        <img src="/static/logo.png" style="width: 80px; margin-bottom: 20px;"><br>
+        Please open VedaSync on a Computer or Laptop.<br><br>
+        <span style="font-size: 1rem; color: #fbbf24; font-weight: normal;">This immersive 3D experience is not yet compatible with mobile devices.</span>
+    </div>
+
+    <div id="entry-screen">
+        <img src="/static/logo.png" style="width: 100px; margin-bottom: 10px;">
+        <h2 style="font-weight: 400; letter-spacing: 2px;">Awaken The Wisdom of VedaSync</h2>
+        <button id="enter-btn">Enter Ashram</button>
+    </div>
+
+    <div id="intro-overlay">
+        <video id="intro-video" src="/static/intro.mp4" playsinline disablePictureInPicture></video>
+    </div>
+
+    <div id="postcard-export">
+        <div style="text-align: center; border-bottom: 1px solid #78350f; padding-bottom: 10px;">
+            <img src="/static/logo.png" style="width: 40px; vertical-align: middle;">
+            <span style="color: #fbbf24; font-size: 22px; font-weight: bold; letter-spacing: 2px; vertical-align: middle; margin-left: 10px;">VedaSync Wisdom</span>
+        </div>
+        <div style="display: flex; gap: 20px; align-items: center;">
+            <img id="pc-baba-img" style="width: 160px; height: 160px; border-radius: 50%; border: 3px solid #fbbf24; object-fit: cover;">
+            <div style="flex: 1;">
+                <div style="margin-bottom: 15px; border-left: 3px solid #fbbf24; padding-left: 15px;">
+                    <p style="font-size: 12px; color: #fbbf24; margin: 0 0 5px 0;">You asked:</p>
+                    <p id="pc-user-text" style="font-size: 15px; margin: 0; font-style: italic;">...</p>
+                </div>
+                <div style="background: rgba(0,0,0,0.4); padding: 15px; border-radius: 8px; border: 1px solid #78350f;">
+                    <p style="font-size: 12px; color: #34d399; margin: 0 0 8px 0;">Baba replied:</p>
+                    <p id="pc-bot-text" style="font-size: 15px; margin: 0; line-height: 1.6; white-space: pre-wrap;">...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="avatar-container">
+        <video id="bg-video" src="/static/bg-video.mp4" autoplay loop muted playsinline></video>
+        <div id="subtitles"></div> 
+    </div>
+
+    <div id="chat-container">
+        <div class="mandala-bg"></div>
+        <div id="header">
+            <img src="/static/logo.png" style="width: 25px; vertical-align: middle; margin-right: 10px;" alt="Logo">
+            VedaSync - Baba
+            <button id="download-btn">📜 Save Wisdom</button>
+        </div>
+        
+        <div id="chat-history"></div>
+        <div id="controls">
+            <div id="quick-ask-section">
+                <div style="font-size: 11px; color: #fbbf24; font-weight: bold; margin-bottom: 6px;">✨ Start talking to VedaSync</div>
+                <div class="quick-ask-container">
+                    <button class="quick-btn" onclick="triggerQuickAsk('What is Karma?')">What is Karma?</button>
+                    <button class="quick-btn" onclick="triggerQuickAsk('Explain my Duty')">Explain my Duty</button>
+                    <button class="quick-btn" onclick="triggerQuickAsk('Karmanye Vadhikaraste')">Karmanye Vadhikaraste</button>
+                </div>
+            </div>
+            
+            <div class="row">
+                <div class="select-group">
+                    <span class="label-text">🎤 I am speaking in:</span>
+                    <select id="input-lang-select">
+                        <option value="auto" selected>Auto-Detect</option>
+                        <option value="en-US">English</option>
+                        <option value="hi-IN">Hindi (हिंदी)</option>
+                        <option value="hi-IN">Sanskrit (संस्कृत)</option>
+                        <option value="pa-IN">Punjabi (ਪੰਜਾਬੀ)</option>
+                        <option value="ur-IN">Urdu (اردو)</option>
+                        <option value="mr-IN">Marathi (मराठी)</option>
+                        <option value="gu-IN">Gujarati (ગુજરાતી)</option>
+                        <option value="ta-IN">Tamil (தமிழ்)</option>
+                        <option value="te-IN">Telugu (తెలుగు)</option>
+                        <option value="ml-IN">Malayalam (മലയാളം)</option>
+                    </select>
+                </div>
+                <div class="select-group">
+                    <span class="label-text">🔊 Baba should reply in:</span>
+                    <select id="output-lang-select">
+                        <option value="auto" selected>Auto-Detect</option>
+                        <option value="en">English</option>
+                        <option value="hi">Hindi (हिंदी)</option>
+                        <option value="pa">Punjabi (ਪੰਜਾਬੀ)</option>
+                        <option value="ur">Urdu (اردو)</option>
+                        <option value="mr">Marathi (मराठी)</option>
+                        <option value="gu">Gujarati (ગુજરાતી)</option>
+                        <option value="ta">Tamil (தமிழ்)</option>
+                        <option value="te">Telugu (తెలుగు)</option>
+                        <option value="ml">Malayalam (മലയാളം)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="row">
+                <button id="mic-btn">🎤 Speak</button>
+                <input type="text" id="text-input" placeholder="Type a Shloka, ask for guidance, or talk to Baba...">
+                <button id="send-btn">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let sessionId = localStorage.getItem('vedaSyncSession');
+        if (!sessionId) {
+            sessionId = 'user_' + Math.random().toString(36).substr(2, 9);
+            localStorage.setItem('vedaSyncSession', sessionId);
+        }
+
+        const entryScreen = document.getElementById('entry-screen');
+        const enterBtn = document.getElementById('enter-btn');
+        const introOverlay = document.getElementById('intro-overlay');
+        const introVideo = document.getElementById('intro-video');
+        const bgmAudio = document.getElementById('bgm-audio');
+        const conchAudio = document.getElementById('conch-audio');
+        
+        const vidNormal = document.getElementById('bg-video');
+        const subtitles = document.getElementById('subtitles');
+
+        let targetBgmVolume = 0.25; 
+        let bgmStarted = false;
+        
+        let lastUserMsg = "";
+        let lastBotMsg = "";
+        let fetchController = null; 
+
+        enterBtn.addEventListener('click', () => {
+            introOverlay.style.display = 'block';
+            introVideo.play();
+            entryScreen.style.opacity = '0';
+            setTimeout(() => { entryScreen.style.display = 'none'; }, 500);
+        });
+
+        introVideo.addEventListener('ended', () => {
+            introOverlay.style.background = 'white';
+            introVideo.style.opacity = '0'; 
+            setTimeout(() => { introOverlay.style.opacity = '0'; }, 100);
+            setTimeout(() => {
+                introOverlay.style.display = 'none';
+                bgmAudio.volume = 0; 
+                bgmAudio.play();
+                bgmStarted = true;
+            }, 2100);
+        });
+
+        const chatHistory = document.getElementById('chat-history');
+        const textInput = document.getElementById('text-input');
+        const micBtn = document.getElementById('mic-btn');
+        const sendBtn = document.getElementById('send-btn');
+        
+        let isSpeaking = false;
+        let isWaitingForAI = false; 
+        let currentAudio = null;    
+
+        async function loadHistory() {
+            try {
+                const res = await fetch(`/get_history?session_id=${sessionId}`);
+                const history = await res.json();
+                history.forEach(msg => {
+                    appendMessage('user', msg.user);
+                    appendMessage('bot', msg.bot, msg.source, msg.score); 
+                });
+            } catch(e) { console.log("No DB history yet."); }
+        }
+        loadHistory();
+
+        function appendMessage(sender, text, source = 'gemini', score = 0) {
+            let div = document.createElement('div');
+            div.className = `message ${sender === 'user' ? 'user-msg' : (sender === 'error' ? 'error-msg' : 'bot-msg')}`;
+            
+            if (source === 'db') div.innerHTML = `<span class="db-tag">⚡ Cache Match: ${score}%</span><br>${text}`;
+            else if (source === 'verified_db') div.innerHTML = `<span class="verified-tag">📜 Verified Scripture: ${score}%</span><br>${text}`;
+            else div.innerText = text;
+            
+            chatHistory.appendChild(div);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+
+        // --- POSTCARD GENERATOR FIX (Includes background video & face front) ---
+        document.getElementById('download-btn').addEventListener('click', () => {
+            if (!lastBotMsg) return;
+            const btn = document.getElementById('download-btn');
+            btn.innerText = "⏳ Saving...";
+            
+            document.getElementById('pc-user-text').innerText = lastUserMsg;
+            document.getElementById('pc-bot-text').innerText = lastBotMsg;
+            
+            // Force Baba to look front
+            if (head) { head.rotation.set(0, 0, 0); }
+            if (jawBone) { jawBone.rotation.x = 0; }
+            eyelidBones.forEach(b => b.rotation.set(0, 0, 0));
+            mouthBones.forEach(b => b.rotation.set(0, 0, 0));
+            renderer.render(scene, camera); 
+            
+            // Create composite canvas to merge Video + 3D
+            let compCanvas = document.createElement('canvas');
+            compCanvas.width = renderer.domElement.width;
+            compCanvas.height = renderer.domElement.height;
+            let ctx = compCanvas.getContext('2d');
+            
+            if (vidNormal && vidNormal.readyState >= 2) {
+                let vRatio = vidNormal.videoWidth / vidNormal.videoHeight;
+                let cRatio = compCanvas.width / compCanvas.height;
+                let sx = 0, sy = 0, sWidth = vidNormal.videoWidth, sHeight = vidNormal.videoHeight;
+                if (vRatio > cRatio) {
+                    sWidth = vidNormal.videoHeight * cRatio;
+                    sx = (vidNormal.videoWidth - sWidth) / 2;
+                } else {
+                    sHeight = vidNormal.videoWidth / cRatio;
+                    sy = (vidNormal.videoHeight - sHeight) / 2;
+                }
+                ctx.drawImage(vidNormal, sx, sy, sWidth, sHeight, 0, 0, compCanvas.width, compCanvas.height);
+            }
+            
+            ctx.drawImage(renderer.domElement, 0, 0);
+            document.getElementById('pc-baba-img').src = compCanvas.toDataURL('image/png');
+            
+            const pcExport = document.getElementById('postcard-export');
+            pcExport.style.left = '0px'; 
+            
+            html2canvas(pcExport, {backgroundColor: null}).then(canvas => {
+                let link = document.createElement('a');
+                link.download = 'VedaSync_Wisdom.png';
+                link.href = canvas.toDataURL();
+                link.click();
+                btn.innerText = "📜 Save Wisdom";
+                pcExport.style.left = '-9999px'; 
+            });
+        });
+
+        function triggerQuickAsk(text) {
+            document.getElementById('quick-ask-section').style.display = 'none'; 
+            textInput.value = text;
+            sendMessage(text);
+        }
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recognition = new SpeechRecognition();
+        recognition.interimResults = false;
+        recognition.continuous = false;
+        recognition.maxAlternatives = 1;
+
+        let isListening = false;
+        micBtn.addEventListener('click', () => {
+            if (isWaitingForAI && fetchController) {
+                fetchController.abort();
+                isWaitingForAI = false;
+                sendBtn.innerHTML = "Send";
+                sendBtn.disabled = false;
+            }
+            
+            // --- FIX: Reset Easter Egg if interrupted ---
+            if (isSpeaking && currentAudio) {
+                currentAudio.pause();
+                currentAudio = null;
+                isSpeaking = false;
+                subtitles.style.opacity = '0'; 
+                vidNormal.style.filter = 'none'; 
+                conchAudio.pause();
+                conchAudio.currentTime = 0;
+            }
+
+            if (!isListening) {
+                let selectedLang = document.getElementById('input-lang-select').value;
+                recognition.lang = selectedLang === 'auto' ? '' : selectedLang; 
+                recognition.start();
+                micBtn.innerHTML = "🛑 Listening...";
+                micBtn.style.background = "#fbbf24";
+                micBtn.style.color = "#450a0a"; 
+                isListening = true;
+            } else {
+                recognition.stop();
+            }
+        });
+
+        recognition.onresult = (event) => {
+            textInput.value = event.results[0][0].transcript;
+            resetMicBtn();
+            sendMessage(textInput.value);
+        };
+        recognition.onerror = () => resetMicBtn();
+        recognition.onend = () => resetMicBtn();
+
+        function resetMicBtn() {
+            micBtn.innerHTML = "🎤 Speak";
+            micBtn.style.background = "linear-gradient(135deg, #ef4444, #b91c1c)";
+            micBtn.style.color = "white";
+            isListening = false;
+        }
+
+        sendBtn.addEventListener('click', () => { if(textInput.value.trim() !== '') sendMessage(textInput.value); });
+        textInput.addEventListener('keypress', (e) => { if(e.key === 'Enter' && textInput.value.trim() !== '') sendMessage(textInput.value); });
+
+        async function sendMessage(text) {
+            if (fetchController) fetchController.abort();
+            fetchController = new AbortController();
+
+            isWaitingForAI = true; 
+            sendBtn.innerHTML = "⏳ Thinking...";
+            sendBtn.disabled = true;
+
+            // --- FIX: Reset Easter Egg if sending new message ---
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio = null;
+                isSpeaking = false;
+                subtitles.style.opacity = '0';
+                vidNormal.style.filter = 'none'; 
+                conchAudio.pause();
+                conchAudio.currentTime = 0;
+            }
+
+            appendMessage('user', text);
+            lastUserMsg = text; 
+            textInput.value = '';
+            
+            let outLang = document.getElementById('output-lang-select').value;
+
+            try {
+                const chatRes = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text, lang: outLang, session_id: sessionId }),
+                    signal: fetchController.signal
+                });
+                
+                const chatData = await chatRes.json();
+
+                if (chatData.error || !chatData.reply) {
+                    isWaitingForAI = false;
+                    sendBtn.innerHTML = "Send";
+                    sendBtn.disabled = false;
+                    appendMessage('error', chatData.error || "Undefined Error.");
+                    return;
+                }
+
+                const botReply = chatData.reply;
+                lastBotMsg = botReply; 
+                appendMessage('bot', botReply, chatData.source, chatData.score);
+
+                if (chatData.is_mahavakya) {
+                    vidNormal.style.filter = 'hue-rotate(90deg) brightness(1.5)';
+                    conchAudio.volume = 0.4;
+                    conchAudio.play();
+                }
+
+                const ttsRes = await fetch('/tts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: botReply, lang: outLang }),
+                    signal: fetchController.signal
+                });
+
+                if(ttsRes.ok) {
+                    const audioBlob = await ttsRes.blob();
+                    isWaitingForAI = false;
+                    sendBtn.innerHTML = "Send";
+                    sendBtn.disabled = false;
+                    
+                    subtitles.innerText = botReply;
+                    subtitles.style.opacity = '1';
+
+                    playAudioWithLipSync(audioBlob, chatData.is_mahavakya);
+                } else {
+                    isWaitingForAI = false;
+                    sendBtn.innerHTML = "Send";
+                    sendBtn.disabled = false;
+                    appendMessage('error', "Voice creation failed.");
+                }
+
+            } catch (err) {
+                if (err.name === 'AbortError') return; 
+                isWaitingForAI = false;
+                sendBtn.innerHTML = "Send";
+                sendBtn.disabled = false;
+                appendMessage('error', "Network Error: Check API key.");
+            }
+        }
+
+        const container = document.getElementById('avatar-container');
+        const scene = new THREE.Scene();
+        
+        const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 100);
+        camera.position.set(0, 0.5, 1.5);
+
+        const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.outputEncoding = THREE.sRGBEncoding; 
+        
+        renderer.domElement.style.position = 'relative';
+        renderer.domElement.style.zIndex = '1';
+        container.appendChild(renderer.domElement);
+
+        const auraLight = new THREE.PointLight(0xffaa00, 0, 5); 
+        auraLight.position.set(0, 0, -0.5); 
+        scene.add(auraLight);
+
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.8);
+        hemiLight.position.set(0, 20, 0);
+        scene.add(hemiLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+        dirLight.position.set(2, 5, 5);
+        scene.add(dirLight);
+
+        const particleCount = 150;
+        const particlesGeo = new THREE.BufferGeometry();
+        const posArray = new Float32Array(particleCount * 3);
+        for(let i=0; i<particleCount*3; i++) posArray[i] = (Math.random() - 0.5) * 5; 
+        particlesGeo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+        const particleMat = new THREE.PointsMaterial({size: 0.03, color: 0xffaa00, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending});
+        const particlesMesh = new THREE.Points(particlesGeo, particleMat);
+        scene.add(particlesMesh);
+
+        let avatar, spine, head;
+        let leftArm, leftForeArm, leftHand;
+        let rightArm, rightForeArm, rightHand;
+        let jawBone;
+        let mouthBones = []; 
+        let eyelidBones = [];
+        let eyebrowBones = [];
+        let rightFingers = []; 
+        let clothBones = [];   
+
+        const loader = new THREE.GLTFLoader();
+        
+        loader.load('/static/buddha.glb', (gltf) => {
+            avatar = gltf.scene;
+            avatar.position.set(0, -1.3, 0); 
+            scene.add(avatar);
+
+            avatar.traverse((child) => {
+                if (child.isBone) {
+                    let name = child.name.toLowerCase();
+                    if (name === 'spine1' || name === 'spine2') spine = child;
+                    if (name === 'head') head = child;
+                    if (name === 'leftarm') leftArm = child;
+                    if (name === 'leftforearm') leftForeArm = child;
+                    if (name === 'lefthand') leftHand = child;
+                    if (name === 'rightarm') rightArm = child;
+                    if (name === 'rightforearm') rightForeArm = child;
+                    if (name === 'righthand') rightHand = child;
+                    if (name === 'jaw_aan') jawBone = child;
+                    
+                    if (name.includes('lip') || name.includes('teeth')) mouthBones.push(child);
+                    if (name.includes('eyelid') && !name.includes('end') && name !== 'eyelid_aan') eyelidBones.push(child);
+                    if (name.includes('brow') && !name.includes('end')) eyebrowBones.push(child);
+                    if (name.includes('righthand') && !name.includes('end') && name !== 'righthand') {
+                        if (name.includes('index') || name.includes('middle') || name.includes('ring') || name.includes('pinky') || name.includes('thumb')) rightFingers.push(child);
+                    }
+                    if ((name.includes('cape') || name.includes('cloak') || name.includes('skirt') || name.includes('waistcloth')) && !name.includes('end')) {
+                        clothBones.push({ bone: child, initX: child.rotation.x, initZ: child.rotation.z });
+                    }
+                }
+            });
+
+            if (leftArm) leftArm.rotation.z = -1.2; 
+            if (rightArm) rightArm.rotation.z = 1.2; 
+            if (leftForeArm) leftForeArm.rotation.x = -0.3; 
+            if (rightForeArm) rightForeArm.rotation.x = -0.3;
+        });
+
+        let mouseX = 0; let mouseY = 0;
+        document.addEventListener('mousemove', (e) => {
+            let rect = container.getBoundingClientRect();
+            let centerX = rect.left + rect.width / 2;
+            let centerY = rect.top + rect.height * 0.3; 
+            let diffX = e.clientX - centerX;
+            let diffY = e.clientY - centerY;
+            mouseX = Math.max(-1, Math.min(1, diffX / (rect.width / 2)));
+            mouseY = Math.max(-1, Math.min(1, diffY / (rect.height / 2)));
+        });
+
+        let audioContext, analyser, dataArray;
+
+        function playAudioWithLipSync(blob, wasMahavakya) {
+            const url = URL.createObjectURL(blob);
+            currentAudio = new Audio(url);
+            
+            if(!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256;
+                dataArray = new Uint8Array(analyser.frequencyBinCount);
+            }
+
+            const source = audioContext.createMediaElementSource(currentAudio);
+            source.connect(analyser);
+            analyser.connect(audioContext.destination);
+
+            currentAudio.play();
+            isSpeaking = true;
+            currentAudio.onended = () => { 
+                isSpeaking = false; 
+                currentAudio = null; 
+                subtitles.style.opacity = '0'; 
+                
+                if (wasMahavakya) {
+                    vidNormal.style.filter = 'none'; 
+                }
+            };
+        }
+
+        function lerp(start, end, factor) { return start + (end - start) * factor; }
+
+        const clock = new THREE.Clock();
+        let lastBlinkTime = 0;
+        let nextBlinkInterval = 3;
+        let isBlinking = false;
+        let blinkStartTime = 0;
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = clock.getElapsedTime();
+            let volume = 0;
+
+            particlesMesh.rotation.y = time * 0.05;
+            const positions = particlesGeo.attributes.position.array;
+            for(let i=1; i<particleCount*3; i+=3) {
+                positions[i] += 0.005; 
+                if (positions[i] > 3) positions[i] = -3; 
+            }
+            particlesGeo.attributes.position.needsUpdate = true;
+
+            if (bgmStarted && bgmAudio) {
+                if (isSpeaking || isWaitingForAI) targetBgmVolume = 0.02; 
+                else if (isListening) targetBgmVolume = 0.0875;
+                else targetBgmVolume = 0.25; 
+
+                let volDiff = targetBgmVolume - bgmAudio.volume;
+                let lerpSpeed = volDiff < 0 ? 0.05 : 0.01; 
+                bgmAudio.volume = lerp(bgmAudio.volume, targetBgmVolume, lerpSpeed);
+            }
+
+            if (isSpeaking && analyser) {
+                analyser.getByteFrequencyData(dataArray);
+                let sum = 0;
+                for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+                volume = sum / dataArray.length; 
+            }
+
+            let targetAuraIntensity = isSpeaking ? (volume / 255) * 5 : 0;
+            auraLight.intensity = lerp(auraLight.intensity, targetAuraIntensity, 0.1);
+
+            let targetCamZ = isSpeaking ? 1.35 : 1.5;
+            camera.position.z = lerp(camera.position.z, targetCamZ, 0.05);
+
+            if (avatar) {
+                clothBones.forEach((cloth, index) => {
+                    let sway = Math.sin(time * 2 + index * 0.5) * 0.04;
+                    cloth.bone.rotation.z = lerp(cloth.bone.rotation.z, cloth.initZ + sway, 0.1);
+                    cloth.bone.rotation.x = lerp(cloth.bone.rotation.x, cloth.initX + sway * 0.5, 0.1);
+                });
+
+                let tHeadX = mouseY * 0.2;
+                let tHeadY = mouseX * 0.3;
+                let tHeadZ = 0;
+                
+                let tLeftArmX = Math.sin(time * 1.5) * 0.1;
+                let tRightArmX = Math.sin(time * 1.5) * 0.1;
+                let tLeftArmZ = -1.2 + Math.sin(time * 1.2) * 0.05;  
+                let tRightArmZ = 1.2 - Math.sin(time * 1.2) * 0.05;
+                
+                let tLeftForeArmX = -0.1 + Math.sin(time * 0.7) * 0.05;
+                let tLeftForeArmZ = Math.sin(time * 0.6) * 0.05; 
+                let tRightForeArmX = -0.1 + Math.sin(time * 0.8) * 0.05;
+                let tRightForeArmZ = Math.sin(time * 0.5) * 0.05; 
+                
+                let tLeftHandX = 0, tLeftHandY = 0, tLeftHandZ = 0;
+                let tRightHandX = 0, tRightHandY = 0, tRightHandZ = 0;
+                
+                let tFingerCurlZ = 0, tFingerCurlX = 0;
+
+                if (isWaitingForAI) {
+                    tHeadX = 0.15; tHeadY = Math.sin(time * 0.8) * 0.2; tHeadZ = -0.05;
+                    tRightArmX = -0.8; tRightArmZ = 0.8;
+                    tRightForeArmX = 2.4 + Math.sin(time * 1.5) * 0.1; tRightForeArmZ = 0.5; 
+                    tRightHandX = -0.5; tRightHandY = 1; tRightHandZ = -0.3;
+                    tFingerCurlZ = 0; tFingerCurlX = 0.65; 
+                } 
+                else if (isSpeaking) {
+                    tHeadX = (volume / 255) * 0.15; tHeadY = Math.sin(time * 0.5) * 0.05;
+                    tLeftArmX = Math.sin(time * 2) * 0.3; tRightArmX = Math.sin(time * 2.2) * 0.3;
+                    tLeftArmZ = -1.0; tRightArmZ = 1.0;
+                    tLeftForeArmX = 0.8 + Math.abs(Math.sin(time * 2.5)) * 0.6; tLeftForeArmZ = Math.sin(time * 1.5) * 0.2;
+                    tRightForeArmX = 0.8 + Math.abs(Math.sin(time * 2.2)) * 0.6; tRightForeArmZ = -Math.sin(time * 1.7) * 0.2;
+                    tLeftHandX = Math.sin(time * 4) * 0.25; tRightHandX = -Math.sin(time * 3) * 0.25;
+                }
+
+                if (head) {
+                    head.rotation.x = lerp(head.rotation.x, tHeadX, 0.08);
+                    head.rotation.y = lerp(head.rotation.y, tHeadY, 0.08);
+                    head.rotation.z = lerp(head.rotation.z, tHeadZ, 0.08);
+                }
+                
+                if (leftArm) { leftArm.rotation.x = lerp(leftArm.rotation.x, tLeftArmX, 0.08); leftArm.rotation.z = lerp(leftArm.rotation.z, tLeftArmZ, 0.08); }
+                if (rightArm) { rightArm.rotation.x = lerp(rightArm.rotation.x, tRightArmX, 0.08); rightArm.rotation.z = lerp(rightArm.rotation.z, tRightArmZ, 0.08); }
+                if (leftForeArm) { leftForeArm.rotation.x = lerp(leftForeArm.rotation.x, tLeftForeArmX, 0.1); leftForeArm.rotation.z = lerp(leftForeArm.rotation.z, tLeftForeArmZ, 0.1); }
+                if (rightForeArm) { rightForeArm.rotation.x = lerp(rightForeArm.rotation.x, tRightForeArmX, 0.1); rightForeArm.rotation.z = lerp(rightForeArm.rotation.z, tRightForeArmZ, 0.1); }
+                if (leftHand) { leftHand.rotation.x = lerp(leftHand.rotation.x, tLeftHandX, 0.1); leftHand.rotation.y = lerp(leftHand.rotation.y, tLeftHandY, 0.1); leftHand.rotation.z = lerp(leftHand.rotation.z, tLeftHandZ, 0.1); }
+                if (rightHand) { rightHand.rotation.x = lerp(rightHand.rotation.x, tRightHandX, 0.1); rightHand.rotation.y = lerp(rightHand.rotation.y, tRightHandY, 0.1); rightHand.rotation.z = lerp(rightHand.rotation.z, tRightHandZ, 0.1); }
+
+                rightFingers.forEach(bone => { bone.rotation.z = lerp(bone.rotation.z, tFingerCurlZ, 0.1); bone.rotation.x = lerp(bone.rotation.x, tFingerCurlX, 0.1); });
+
+                let targetBrow = isSpeaking ? (volume / 128) * 0.6 : 0; 
+                eyebrowBones.forEach(bone => { 
+                    bone.rotation.x = lerp(bone.rotation.x, targetBrow, 0.3); 
+                    let zDir = bone.name.toLowerCase().includes('left') ? -0.2 : 0.2;
+                    bone.rotation.z = lerp(bone.rotation.z, targetBrow * zDir, 0.3);
+                });
+
+                let mouthMovement = isSpeaking ? (volume / 255) * 0.4 : 0;
+                if (jawBone) jawBone.rotation.x = lerp(jawBone.rotation.x, mouthMovement, 0.4); 
+                
+                mouthBones.forEach(bone => {
+                    let bName = bone.name.toLowerCase();
+                    if (bName.includes('top') || bName.includes('t_aan')) bone.rotation.x = lerp(bone.rotation.x, -mouthMovement * 0.4, 0.4); 
+                    else if (bName.includes('d_aan')) bone.rotation.x = lerp(bone.rotation.x, mouthMovement * 0.5, 0.4); 
+                });
+
+                if (time - lastBlinkTime > nextBlinkInterval && !isBlinking) {
+                    isBlinking = true; blinkStartTime = time; nextBlinkInterval = 2 + Math.random() * 4; 
+                }
+                
+                let targetBlink = 0;
+                if (isBlinking) {
+                    let bDuration = time - blinkStartTime;
+                    if (bDuration < 0.15) targetBlink = bDuration / 0.15; 
+                    else if (bDuration < 0.3) targetBlink = 1 - ((bDuration - 0.15) / 0.15); 
+                    else { isBlinking = false; lastBlinkTime = time; }
+                }
+                
+                eyelidBones.forEach(bone => {
+                    let n = bone.name.toLowerCase();
+                    if (n === 'eyelid_aan' || n.includes('end')) return;
+                    if (n.includes('t')) bone.rotation.x = lerp(bone.rotation.x, -targetBlink * 1.8, 0.3); 
+                    if (n.includes('d')) bone.rotation.x = lerp(bone.rotation.x, targetBlink * 0.4, 0.3); 
+                });
+            }
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        });
+    </script>
+</body>
+</html>
